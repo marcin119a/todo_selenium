@@ -14,8 +14,6 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 BASE_URL = "http://localhost:5173"
-EXISTING_EMAIL = "marcin119a@gmail.com"
-EXISTING_PASSWORD = "string"
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -102,12 +100,13 @@ class TestRegistration:
         )
         assert active_tab.text == "Logowanie"
 
-    def test_register_existing_email_shows_error(self, driver):
+    def test_register_existing_email_shows_error(self, driver, existing_user):
         """Rejestracja z już istniejącym emailem → komunikat błędu."""
+        existing_email, existing_password = existing_user
         open_app(driver)
         switch_to_register(driver)
 
-        fill_auth_form(driver, EXISTING_EMAIL, EXISTING_PASSWORD)
+        fill_auth_form(driver, existing_email, existing_password)
         submit_form(driver)
 
         error = get_error(driver)
@@ -118,28 +117,77 @@ class TestRegistration:
             for kw in ["już istnieje", "exist", "registered", "zarejestrowany", "email"]
         ), f"Nieoczekiwana treść błędu: {error}"
 
+    def test_register_empty_fields_blocked(self, driver):
+        """Formularz rejestracji z pustymi polami nie może zostać wysłany."""
+        open_app(driver)
+        switch_to_register(driver)
+        submit_form(driver)
+
+        # Strona powinna nadal pokazywać ekran auth
+        assert is_on_auth_page(driver), "Po próbie wysłania pustego formularza powinien być widoczny ekran auth"
+        assert not is_logged_in(driver, timeout=3), "Nie powinno dać się zarejestrować z pustymi polami"
+
+    def test_register_invalid_email_format_blocked(self, driver):
+        """Rejestracja z nieprawidłowym formatem emaila → walidacja HTML5 blokuje."""
+        open_app(driver)
+        switch_to_register(driver)
+
+        email_input = driver.find_element(By.CSS_SELECTOR, "input[type='email']")
+        email_input.clear()
+        email_input.send_keys("nieprawidlowy-email")
+        driver.find_element(By.CSS_SELECTOR, "input[type='password']").send_keys("haslo123")
+        submit_form(driver)
+
+        # Walidacja HTML5 powinna zablokować wysłanie – dashboard nie może się pojawić
+        assert not is_logged_in(driver, timeout=3), "Nie powinno dać się zarejestrować z nieprawidłowym emailem"
+        assert is_on_auth_page(driver), "Ekran auth powinien być nadal widoczny"
+
+    def test_register_then_login_with_new_credentials(self, driver):
+        """Po rejestracji nowego konta użytkownik może się zalogować tymi danymi."""
+        open_app(driver)
+        switch_to_register(driver)
+
+        unique_email = f"test_{uuid.uuid4().hex[:8]}@example.com"
+        password = "haslo123"
+        fill_auth_form(driver, unique_email, password)
+        submit_form(driver)
+
+        # Czekamy na toast sukcesu i powrót do zakładki logowania
+        wait(driver).until(EC.visibility_of_element_located((By.CSS_SELECTOR, ".toast")))
+        wait(driver).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, ".auth-tab.active"))
+        )
+
+        # Logujemy się nowo utworzonym kontem
+        fill_auth_form(driver, unique_email, password)
+        submit_form(driver)
+
+        assert is_logged_in(driver), "Nowo zarejestrowany użytkownik powinien móc się zalogować"
+
 
 # ── LOGOWANIE ─────────────────────────────────────────────────────────────────
 
 class TestLogin:
 
-    def test_login_valid_credentials(self, driver):
+    def test_login_valid_credentials(self, driver, existing_user):
         """Logowanie poprawnymi danymi → dashboard widoczny, email użytkownika w topbarze."""
+        existing_email, existing_password = existing_user
         open_app(driver)
-        fill_auth_form(driver, EXISTING_EMAIL, EXISTING_PASSWORD)
+        fill_auth_form(driver, existing_email, existing_password)
         submit_form(driver)
 
         assert is_logged_in(driver), "Dashboard nie pojawił się po poprawnym logowaniu"
 
         topbar_user = driver.find_element(By.CSS_SELECTOR, ".topbar-user").text
-        assert EXISTING_EMAIL in topbar_user, (
-            f"Email użytkownika '{EXISTING_EMAIL}' nie widoczny w topbarze (jest: '{topbar_user}')"
+        assert existing_email in topbar_user, (
+            f"Email użytkownika '{existing_email}' nie widoczny w topbarze (jest: '{topbar_user}')"
         )
 
-    def test_login_wrong_password_shows_error(self, driver):
+    def test_login_wrong_password_shows_error(self, driver, existing_user):
         """Logowanie błędnym hasłem → komunikat błędu, brak dashboardu."""
+        existing_email, _ = existing_user
         open_app(driver)
-        fill_auth_form(driver, EXISTING_EMAIL, "bledne_haslo_xyz")
+        fill_auth_form(driver, existing_email, "bledne_haslo_xyz")
         submit_form(driver)
 
         error = get_error(driver)
@@ -192,10 +240,11 @@ class TestLogout:
 
 class TestSessionPersistence:
 
-    def test_session_persists_after_page_refresh(self, driver):
+    def test_session_persists_after_page_refresh(self, driver, existing_user):
         """Po zalogowaniu i odświeżeniu strony użytkownik nadal jest zalogowany."""
+        existing_email, existing_password = existing_user
         open_app(driver)
-        fill_auth_form(driver, EXISTING_EMAIL, EXISTING_PASSWORD)
+        fill_auth_form(driver, existing_email, existing_password)
         submit_form(driver)
         assert is_logged_in(driver), "Logowanie nie powiodło się"
 
@@ -213,10 +262,11 @@ class TestSessionPersistence:
 
         assert is_on_auth_page(driver), "Bez tokenu powinna być widoczna strona logowania"
 
-    def test_logged_in_token_in_localstorage(self, driver):
+    def test_logged_in_token_in_localstorage(self, driver, existing_user):
         """Po poprawnym logowaniu token jest zapisany w localStorage."""
+        existing_email, existing_password = existing_user
         open_app(driver)
-        fill_auth_form(driver, EXISTING_EMAIL, EXISTING_PASSWORD)
+        fill_auth_form(driver, existing_email, existing_password)
         submit_form(driver)
         assert is_logged_in(driver)
 

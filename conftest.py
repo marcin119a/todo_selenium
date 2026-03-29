@@ -1,19 +1,34 @@
 import os
 import re
+import uuid
 import pytest
+import requests
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 
 BASE_URL = "http://localhost:5173"
-EXISTING_EMAIL = "marcin119a@gmail.com"
-EXISTING_PASSWORD = "string"
+AUTH_URL = "http://localhost:8000"
+
+
+@pytest.fixture(scope="session")
+def existing_user():
+    """Rejestruje nowego użytkownika raz na całą sesję testową i zwraca (email, password)."""
+    email = f"test_{uuid.uuid4().hex[:8]}@example.com"
+    password = "testpass123"
+    resp = requests.post(
+        f"{AUTH_URL}/auth/register",
+        json={"email": email, "password": password},
+    )
+    assert resp.status_code == 201, f"Nie udało się zarejestrować użytkownika sesji: {resp.text}"
+    return email, password
 
 
 @pytest.fixture(scope="function")
 def driver():
     options = Options()
+    #options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--window-size=1280,900")
@@ -27,20 +42,19 @@ def driver():
 
 
 @pytest.fixture(scope="function")
-def driver_logged_in(driver):
+def driver_logged_in(driver, existing_user):
     """Driver z już zalogowanym użytkownikiem przez localStorage."""
+    email, password = existing_user
     driver.get(BASE_URL)
-    # Wstrzyknij token przez API login, żeby nie klikać UI za każdym razem
-    import requests
     resp = requests.post(
-        "http://localhost:5173/auth/login",
-        data={"username": EXISTING_EMAIL, "password": EXISTING_PASSWORD},
+        f"{AUTH_URL}/auth/login",
+        data={"username": email, "password": password},
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
     token = resp.json().get("access_token", "")
     driver.execute_script(
         f"localStorage.setItem('token', '{token}');"
-        f"localStorage.setItem('userEmail', '{EXISTING_EMAIL}');"
+        f"localStorage.setItem('userEmail', '{email}');"
     )
     driver.refresh()
     return driver
