@@ -7,6 +7,7 @@ Pokrycie:
   US-3.4  Endpoint /tasks/upcoming?days=7 – widok zadań na najbliższy tydzień
 """
 
+import os
 import pytest
 from datetime import date, timedelta
 from selenium.webdriver.common.by import By
@@ -16,11 +17,16 @@ from selenium.webdriver.support import expected_conditions as EC
 BASE_URL = "http://localhost:5173"
 TASK_TITLE = "Zadanie deadline Selenium"
 TASK_TITLE_EDITED = "Zadanie deadline Selenium (edytowane)"
+WAIT_DEFAULT = float(os.getenv("SELENIUM_WAIT_DEFAULT", "6"))
+WAIT_PRESENCE = float(os.getenv("SELENIUM_WAIT_PRESENCE", "4"))
+WAIT_NEGATIVE = float(os.getenv("SELENIUM_WAIT_NEGATIVE", "2"))
+WAIT_SHORT = float(os.getenv("SELENIUM_WAIT_SHORT", "2"))
+WAIT_CLEANUP = float(os.getenv("SELENIUM_WAIT_CLEANUP", "3"))
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
-def wait(driver, timeout=10):
+def wait(driver, timeout=WAIT_DEFAULT):
     return WebDriverWait(driver, timeout)
 
 
@@ -68,7 +74,7 @@ def add_task(driver, title, due_date=None):
     )
 
 
-def get_task_card(driver, title, timeout=8):
+def get_task_card(driver, title, timeout=WAIT_PRESENCE):
     return wait(driver, timeout).until(
         EC.presence_of_element_located(
             (By.XPATH, f"//*[contains(@class,'task-card') and .//*[contains(text(),'{title}')]]")
@@ -76,7 +82,7 @@ def get_task_card(driver, title, timeout=8):
     )
 
 
-def task_exists(driver, title, timeout=6):
+def task_exists(driver, title, timeout=WAIT_PRESENCE):
     try:
         get_task_card(driver, title, timeout)
         return True
@@ -84,7 +90,7 @@ def task_exists(driver, title, timeout=6):
         return False
 
 
-def task_gone(driver, title, timeout=6):
+def task_gone(driver, title, timeout=WAIT_NEGATIVE):
     try:
         wait(driver, timeout).until(
             EC.invisibility_of_element_located(
@@ -105,7 +111,7 @@ def activate_filter(driver, filter_selector):
 def clear_all_filter(driver):
     """Przywraca widok wszystkich zadań."""
     try:
-        btn = wait(driver, 4).until(
+        btn = wait(driver, WAIT_SHORT).until(
             EC.element_to_be_clickable(
                 (By.XPATH, "//button[contains(text(),'Wszystkie') or contains(text(),'All')]")
             )
@@ -136,7 +142,7 @@ def cleanup_test_tasks(driver_logged_in):
                 try:
                     del_btn = cards[0].find_element(By.CSS_SELECTOR, ".icon-btn.danger")
                     del_btn.click()
-                    WebDriverWait(driver, 5).until(EC.staleness_of(cards[0]))
+                    WebDriverWait(driver, WAIT_CLEANUP).until(EC.staleness_of(cards[0]))
                 except Exception:
                     break
     except Exception:
@@ -275,7 +281,7 @@ class TestOverdueFilter:
 
         activate_filter(driver, "[data-filter='overdue'], .filter-overdue, button.overdue")
 
-        assert task_gone(driver, TASK_TITLE, timeout=4), (
+        assert task_gone(driver, TASK_TITLE), (
             "Zadanie z przyszłym terminem nie powinno być widoczne w filtrze przeterminowanych"
         )
 
@@ -288,7 +294,7 @@ class TestOverdueFilter:
 
         activate_filter(driver, "[data-filter='overdue'], .filter-overdue, button.overdue")
 
-        assert task_gone(driver, TASK_TITLE, timeout=4), (
+        assert task_gone(driver, TASK_TITLE), (
             "Zadanie bez due_date nie powinno być widoczne w filtrze przeterminowanych"
         )
 
@@ -447,7 +453,7 @@ class TestUpcomingTasks:
             "a[href*='upcoming'], button[href*='upcoming']",
         )
 
-        assert task_gone(driver, TASK_TITLE, timeout=4), (
+        assert task_gone(driver, TASK_TITLE), (
             "Zadanie z due_date za 10 dni nie powinno być widoczne w widoku 'Nadchodzące (7 dni)'"
         )
 
@@ -464,7 +470,7 @@ class TestUpcomingTasks:
             "a[href*='upcoming'], button[href*='upcoming']",
         )
 
-        assert task_gone(driver, TASK_TITLE, timeout=4), (
+        assert task_gone(driver, TASK_TITLE), (
             "Przeterminowane zadanie nie powinno być widoczne w widoku 'Nadchodzące'"
         )
 
@@ -481,7 +487,7 @@ class TestUpcomingTasks:
             "a[href*='upcoming'], button[href*='upcoming']",
         )
 
-        assert task_gone(driver, TASK_TITLE, timeout=4), (
+        assert task_gone(driver, TASK_TITLE), (
             "Zadanie bez due_date nie powinno być widoczne w widoku 'Nadchodzące'"
         )
 

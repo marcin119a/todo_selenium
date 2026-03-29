@@ -46,7 +46,8 @@ def driver():
     else:
         service = Service(ChromeDriverManager().install())
     drv = webdriver.Chrome(service=service, options=options)
-    drv.implicitly_wait(8)
+    implicit_wait = float(os.getenv("SELENIUM_IMPLICIT_WAIT", "1"))
+    drv.implicitly_wait(implicit_wait)
     yield drv
     drv.quit()
 
