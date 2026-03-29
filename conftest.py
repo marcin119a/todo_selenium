@@ -1,46 +1,71 @@
 import os
 import re
+import uuid
 import pytest
+import requests
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 
-BASE_URL = "http://localhost:5173"
-EXISTING_EMAIL = "marcin119a@gmail.com"
-EXISTING_PASSWORD = "string"
+BASE_URL = os.getenv("BASE_URL", "http://localhost:5173")
+AUTH_URL = os.getenv("AUTH_URL", "http://localhost:8000")
+
+
+@pytest.fixture(scope="session")
+def existing_user():
+    """Rejestruje nowego użytkownika raz na całą sesję testową i zwraca (email, password)."""
+    email = f"test_{uuid.uuid4().hex[:8]}@example.com"
+    password = "testpass123"
+    resp = requests.post(
+        f"{AUTH_URL}/auth/register",
+        json={"email": email, "password": password},
+    )
+    assert resp.status_code == 201, f"Nie udało się zarejestrować użytkownika sesji: {resp.text}"
+    return email, password
 
 
 @pytest.fixture(scope="function")
 def driver():
     options = Options()
+    if os.getenv("CHROME_HEADLESS", "0") in {"1", "true", "TRUE", "yes", "YES"}:
+        options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--window-size=1280,900")
     options.add_argument("--window-position=100,100")
+    chrome_bin = os.getenv("CHROME_BIN")
+    if chrome_bin:
+        options.binary_location = chrome_bin
 
-    service = Service(ChromeDriverManager().install())
+    chromedriver_path = os.getenv("CHROMEDRIVER_PATH")
+    if chromedriver_path and os.path.exists(chromedriver_path):
+        service = Service(chromedriver_path)
+    elif os.path.exists("/usr/bin/chromedriver"):
+        service = Service("/usr/bin/chromedriver")
+    else:
+        service = Service(ChromeDriverManager().install())
     drv = webdriver.Chrome(service=service, options=options)
-    drv.implicitly_wait(8)
+    implicit_wait = float(os.getenv("SELENIUM_IMPLICIT_WAIT", "1"))
+    drv.implicitly_wait(implicit_wait)
     yield drv
     drv.quit()
 
 
 @pytest.fixture(scope="function")
-def driver_logged_in(driver):
+def driver_logged_in(driver, existing_user):
     """Driver z już zalogowanym użytkownikiem przez localStorage."""
+    email, password = existing_user
     driver.get(BASE_URL)
-    # Wstrzyknij token przez API login, żeby nie klikać UI za każdym razem
-    import requests
     resp = requests.post(
-        "http://localhost:5173/auth/login",
-        data={"username": EXISTING_EMAIL, "password": EXISTING_PASSWORD},
+        f"{AUTH_URL}/auth/login",
+        data={"username": email, "password": password},
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
     token = resp.json().get("access_token", "")
     driver.execute_script(
         f"localStorage.setItem('token', '{token}');"
-        f"localStorage.setItem('userEmail', '{EXISTING_EMAIL}');"
+        f"localStorage.setItem('userEmail', '{email}');"
     )
     driver.refresh()
     return driver
