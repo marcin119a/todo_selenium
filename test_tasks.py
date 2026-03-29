@@ -7,6 +7,7 @@ Pokrycie:
   - Status: toggle todo / done
 """
 
+import os
 import pytest
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -15,6 +16,10 @@ from selenium.webdriver.support import expected_conditions as EC
 BASE_URL = "http://localhost:5173"
 TASK_TITLE = "Zadanie testowe Selenium"
 TASK_TITLE_EDITED = "Zadanie testowe Selenium (edytowane)"
+WAIT_DEFAULT = float(os.getenv("SELENIUM_WAIT_DEFAULT", "6"))
+WAIT_PRESENCE = float(os.getenv("SELENIUM_WAIT_PRESENCE", "4"))
+WAIT_NEGATIVE = float(os.getenv("SELENIUM_WAIT_NEGATIVE", "2"))
+WAIT_CLEANUP = float(os.getenv("SELENIUM_WAIT_CLEANUP", "3"))
 
 
 # ── cleanup fixture ───────────────────────────────────────────────────────────
@@ -37,7 +42,7 @@ def cleanup_test_tasks(driver_logged_in):
                 try:
                     del_btn = cards[0].find_element(By.CSS_SELECTOR, ".icon-btn.danger")
                     del_btn.click()
-                    WebDriverWait(driver, 5).until(EC.staleness_of(cards[0]))
+                    WebDriverWait(driver, WAIT_CLEANUP).until(EC.staleness_of(cards[0]))
                 except Exception:
                     break
     except Exception:
@@ -46,7 +51,7 @@ def cleanup_test_tasks(driver_logged_in):
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
-def wait(driver, timeout=10):
+def wait(driver, timeout=WAIT_DEFAULT):
     return WebDriverWait(driver, timeout)
 
 
@@ -74,7 +79,7 @@ def add_task(driver, title):
     )
 
 
-def get_task_item(driver, title, timeout=8):
+def get_task_item(driver, title, timeout=WAIT_PRESENCE):
     """Zwraca element karty zadania zawierający podany tytuł."""
     return wait(driver, timeout).until(
         EC.presence_of_element_located(
@@ -83,7 +88,7 @@ def get_task_item(driver, title, timeout=8):
     )
 
 
-def task_exists(driver, title, timeout=6):
+def task_exists(driver, title, timeout=WAIT_PRESENCE):
     """Sprawdza czy zadanie o podanym tytule jest widoczne na liście."""
     try:
         get_task_item(driver, title, timeout)
@@ -92,7 +97,7 @@ def task_exists(driver, title, timeout=6):
         return False
 
 
-def task_gone(driver, title, timeout=6):
+def task_gone(driver, title, timeout=WAIT_NEGATIVE):
     """Sprawdza czy zadanie zniknęło z listy."""
     try:
         wait(driver, timeout).until(
