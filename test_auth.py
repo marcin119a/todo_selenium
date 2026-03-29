@@ -14,7 +14,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-BASE_URL = "http://localhost:5173"
+BASE_URL = os.getenv("BASE_URL", "http://localhost:5173")
 WAIT_DEFAULT = float(os.getenv("SELENIUM_WAIT_DEFAULT", "6"))
 WAIT_PRESENCE = float(os.getenv("SELENIUM_WAIT_PRESENCE", "4"))
 WAIT_NEGATIVE = float(os.getenv("SELENIUM_WAIT_NEGATIVE", "2"))
